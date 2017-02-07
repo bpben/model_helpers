@@ -150,7 +150,7 @@ class tester():
             m_c = CalibratedClassifierCV(m_fit, method = cal_m, cv='prefit')
             m_fit_c = m_c.fit(self.data.train_x[features], self.data.train_y)
             result_c = self.make_result(m_fit_c, self.data.test_x[features], self.data.test_y)
-            results['calibrated'] = result                   
+            results['calibrated'] = result_c              
             print "\n"
         if name in self.rundict:
             self.rundict[name].update(results)
