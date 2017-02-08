@@ -144,6 +144,7 @@ class tester():
         m_fit = model.fit(self.data.train_x[features], self.data.train_y)
         result = self.make_result(m_fit, self.data.test_x[features], self.data.test_y)
         results['raw'] = result
+        results['m_fit'] = m_fit
        
         if cal==True:
             print "calibrated:"
@@ -163,9 +164,9 @@ class tester():
     
     #Output rundict to csv
     def to_csv(self):
-        if self.rundict = {}:
+        if self.rundict == {}:
             raise ValueError('No results found')
         else:
-            now = pd.to_datetime('today).value
+            now = pd.to_datetime('today').value
             #Make dataframe, transpose so each row = model
-            pd.DataFrame(self.rundict).T.to_csv('results_{}.csv'.format(now)
+            pd.DataFrame(self.rundict).T.to_csv('results_{}.csv'.format(now))
