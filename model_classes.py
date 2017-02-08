@@ -157,6 +157,15 @@ class tester():
         else:
             self.rundict.update({name:results})
     
-    #Run something from out of tuned set
+    #Run from tuned set
     def run_tuned(self, name, cal=True, cal_m='sigmoid'):
         self.run_model(name, self.rundict[name]['model'], self.rundict[name]['features'], cal, cal_m)
+    
+    #Output rundict to csv
+    def to_csv(self):
+        if self.rundict = {}:
+            raise ValueError('No results found')
+        else:
+            now = pd.to_datetime('today).value
+            #Make dataframe, transpose so each row = model
+            pd.DataFrame(self.rundict).T.to_csv('results_{}.csv'.format(now)
