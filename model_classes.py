@@ -45,7 +45,7 @@ class Tuner():
     train_x, train_y = None, None
     
     def __init__(self, indata, best_models=None, grid_results=None):
-        if indata.is_split == 0 :
+        if indata.is_split == 0:
             raise ValueError('Data is not split, cannot be tested')
         else:
             self.data = indata.data
@@ -134,23 +134,38 @@ class Tester():
         result['f1_s'] = f1_s
         result['brier'] = brier
         return(result)
-    
-    #Run model - Specify model, with parameters, features
-    #Stores it to rundict, can later be output
-    #Will overwrite previous run if name is not different
+
+    # Run model - Specify model, with parameters, features
+    # Stores it to rundict, can later be output
+    # Will overwrite previous run if name is not different
     def run_model(self, name, model, features, cal=True, cal_m='sigmoid'):
         results = {}
         results['features'] = list(features)
         print "Fitting {} model with {} features".format(name, len(features))
-        
-        m_fit = model.fit(self.data.train_x[features], self.data.train_y)
-        result = self.make_result(m_fit, self.data.test_x[features], self.data.test_y)
+        if cal:
+            # Need disjoint calibration/training datasets
+            # Split 50/50
+            rnd_ind = np.random.rand(len(self.data.train_x)) < .5
+            train_x = self.data.train_x[features][rnd_ind]
+            train_y = self.data.train_y[rnd_ind]
+            cal_x = self.data.train_x[features][~rnd_ind]
+            cal_y = self.data.train_y[~rnd_ind]
+        else:
+            train_x = self.data.train_x[features]
+            train_y = self.data.train_y
+
+        m_fit = model.fit(train_x, train_y)
+        result = self.make_result(
+            m_fit,
+            self.data.test_x[features],
+            self.data.test_y)
+
         results['raw'] = result
         results['m_fit'] = m_fit
-        if cal==True:
+        if cal:
             print "calibrated:"
             m_c = CalibratedClassifierCV(m_fit, method = cal_m, cv='prefit')
-            m_fit_c = m_c.fit(self.data.train_x[features], self.data.train_y)
+            m_fit_c = m_c.fit(cal_x, cal_y)
             result_c = self.make_result(m_fit_c, self.data.test_x[features], self.data.test_y)
             results['calibrated'] = result_c              
             print "\n"
