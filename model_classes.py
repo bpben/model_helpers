@@ -8,7 +8,7 @@ from sklearn.model_selection import RandomizedSearchCV
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn import cross_validation as cv
 
-class indata():
+class Indata():
     scoring = None
     data = None
     train_x, train_y, test_x, test_y = None, None, None, None
@@ -35,24 +35,26 @@ class indata():
         self.test_y = self.data[self.target][~rnd_ind]
         self.is_split = 1
         
-class tuner(indata):
+class Tuner():
     """
     Initiates with indata class, will tune series of models according to parameters.  
     Outputs RandomizedGridCV results and parameterized model in dictionary
     """
     
-    grid_results = pd.DataFrame()
-    best_models = {}
     data = None
     train_x, train_y = None, None
     
-    def __init__(self, indata):
+    def __init__(self, indata, best_models=None, grid_results=None):
         if indata.is_split == 0 :
             raise ValueError('Data is not split, cannot be tested')
         else:
             self.data = indata.data
             self.train_x = indata.train_x
             self.train_y = indata.train_y
+            if best_models is None:
+                self.best_models = {}
+            if grid_results is None:
+                self.grid_results = pd.DataFrame()
         
             
     def make_grid(self, model, obs, cvparams, mparams):
@@ -88,18 +90,18 @@ class tuner(indata):
         best['features'] = list(features)
         self.best_models.update({name: best}) 
         
-class tester():
+class Tester():
     """
     Initiates with indata class, receives parameterized sklearn models, prints and stores results
     """
-    rundict = {}
-    data = None
     
-    def __init__(self, data):
+    def __init__(self, data, rundict=None):
         if data.is_split == 0 :
             raise ValueError('Data is not split, cannot be tested')
         else:
             self.data = data
+            if rundict is None:
+                self.rundict = {}
             
     #Add tuner object, will populate rundict with names, models, feature
     def init_tuned(self, tuned):
@@ -145,7 +147,6 @@ class tester():
         result = self.make_result(m_fit, self.data.test_x[features], self.data.test_y)
         results['raw'] = result
         results['m_fit'] = m_fit
-       
         if cal==True:
             print "calibrated:"
             m_c = CalibratedClassifierCV(m_fit, method = cal_m, cv='prefit')
