@@ -24,15 +24,22 @@ class indata():
             self.data = data
         self.target = target
     
-    #Split into train/test, pct = percent training observations
-    def tr_te_split(self, pct):
-        rnd_ind = np.random.rand(len(self.data)) < pct
-        self.train_x = self.data[rnd_ind]
+    # Split into train/test
+    # pct = percent training observations
+    # datesort = specify date column for sorting values
+    #   If this is not None, split will be non-random (i.e. split on sorted obs)
+    def tr_te_split(self, pct, datesort=None):
+        if datesort:
+            self.data.sort_values(datesort, inplace=True)
+            inds = np.arange(0.0,len(self.data)) / len(self.data) < pct
+        else:
+            inds = np.random.rand(len(self.data)) < pct
+        self.train_x = self.data[inds]
         print 'Train obs:', len(self.train_x)
-        self.train_y = self.data[self.target][rnd_ind]
-        self.test_x = self.data[~rnd_ind]
+        self.train_y = self.data[self.target][inds]
+        self.test_x = self.data[~inds]
         print 'Test obs:', len(self.test_x)
-        self.test_y = self.data[self.target][~rnd_ind]
+        self.test_y = self.data[self.target][~inds]
         self.is_split = 1
         
 class tuner(indata):
