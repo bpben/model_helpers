@@ -31,6 +31,7 @@ class Indata():
     def tr_te_split(self, pct, datesort=None):
         if datesort:
             self.data.sort_values(datesort, inplace=True)
+            self.data.reset_index(drop=True, inplace=True)
             inds = np.arange(0.0,len(self.data)) / len(self.data) < pct
         else:
             inds = np.random.rand(len(self.data)) < pct
