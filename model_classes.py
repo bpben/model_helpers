@@ -3,7 +3,6 @@ import pandas as pd
 import sklearn.ensemble as ske
 import sklearn.linear_model as skl
 from sklearn import metrics
-from sklearn import metrics
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn import cross_validation as cv
@@ -127,19 +126,20 @@ class Tester():
     #Produce metrics
     def get_metrics(self, preds, probs, test_y):
         f1_s = metrics.f1_score(test_y, preds)
+        roc = metrics.roc_auc_score(test_y, preds)
         brier = metrics.brier_score_loss(test_y, probs)
-        return(f1_s, brier)
+        return(f1_s, roc, brier)
     
     #Run production, output dictionary
     def make_result(self, model, test_x, test_y):
         preds, probs = self.predsprobs(model, test_x)
-        f1_s, brier = self.get_metrics(preds, probs, test_y)
+        f1_s, roc, brier = self.get_metrics(preds, probs, test_y)
         print "f1_score: ", f1_s
+        print "roc auc: ", roc
         print "brier_score: ", brier
         result = {}
-        #result['preds'] = [int(i) for i in preds]
-        #result['probs'] = [float(i) for i in probs]
         result['f1_s'] = f1_s
+        result['roc'] = roc
         result['brier'] = brier
         return(result)
 
