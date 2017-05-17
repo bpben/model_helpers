@@ -1,6 +1,12 @@
 ## Classes for modelling using scikit-learn
 This repo contains python classes that I find helpful for tuning and testing models.  They aren't exactly plug-and-play, but have some functionality that has been helpful in my work.
 
+### Requirements
+- Pandas
+- Scikit-learn
+- Numpy
+- xgboost
+
 ### Indata class
 Data container using Pandas DataFrames that can hold out a scoring set and split train/test sets according to specific criteria.  If you'd prefer date-sorted train/test (e.g. for forecasting), you can specify a date column.
 
