@@ -2,10 +2,12 @@ import numpy as np
 import pandas as pd
 import sklearn.ensemble as ske
 import sklearn.linear_model as skl
+import xgboost as xgb
 from sklearn import metrics
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn import cross_validation as cv
+from sklearn.preprocessing import StandardScaler
 
 class Indata():
     scoring = None
@@ -24,8 +26,8 @@ class Indata():
         self.target = target
     
     # Split into train/test
-    # pct = percent training observations
-    # datesort = specify date column for sorting values
+    # pct : percent training observations
+    # datesort : specify date column for sorting values
     #   If this is not None, split will be non-random (i.e. split on sorted obs)
     def tr_te_split(self, pct, datesort=None):
         if datesort:
@@ -67,7 +69,8 @@ class Tuner():
     def make_grid(self, model, obs, cvparams, mparams):
         #Makes CV grid
         grid = RandomizedSearchCV(
-                    model(),scoring=cvparams['pmetric'], 
+                    model(),
+                    scoring=cvparams['pmetric'], 
                     cv = cv.KFold(obs,cvparams['folds']), 
                     refit=False, n_iter=cvparams['iter'],
                     param_distributions=mparams, verbose=1)
@@ -86,6 +89,8 @@ class Tuner():
             model = getattr(ske, m_name)
         elif hasattr(skl, m_name):
             model = getattr(skl, m_name)
+        elif hasattr(xgb, m_name):
+            model = getattr(xgb, m_name)
         else:
             raise ValueError('Model name is invalid.')
         grid = self.make_grid(model, len(self.train_x), cvparams, mparams)
