@@ -3,10 +3,12 @@ import pandas as pd
 import sklearn.ensemble as ske
 import sklearn.linear_model as skl
 import xgboost as xgb
+import seaborn as sns
+import matplotlib.pyplot as plt
 from sklearn import metrics
-from sklearn.model_selection import RandomizedSearchCV
+from sklearn.model_selection import RandomizedSearchCV, KFold
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn import cross_validation as cv
+#from sklearn import cross_validation as cv
 from sklearn.preprocessing import StandardScaler
 
 class Indata():
@@ -66,12 +68,12 @@ class Tuner():
                 self.grid_results = pd.DataFrame()
         
             
-    def make_grid(self, model, obs, cvparams, mparams):
+    def make_grid(self, model, cvparams, mparams):
         #Makes CV grid
         grid = RandomizedSearchCV(
                     model(),
                     scoring=cvparams['pmetric'], 
-                    cv = cv.KFold(obs,cvparams['folds']), 
+                    cv = KFold(cvparams['folds'], cvparams['shuffle']), 
                     refit=False, n_iter=cvparams['iter'],
                     param_distributions=mparams, verbose=1)
         return(grid)
@@ -93,7 +95,7 @@ class Tuner():
             model = getattr(xgb, m_name)
         else:
             raise ValueError('Model name is invalid.')
-        grid = self.make_grid(model, len(self.train_x), cvparams, mparams)
+        grid = self.make_grid(model, lcvparams, mparams)
         best, results = self.run_grid(grid, self.train_x[features], self.train_y)
         results['name'] = name
         results['m_name'] = m_name
@@ -115,28 +117,28 @@ class Tester():
             if rundict is None:
                 self.rundict = {}
             
-    #Add tuner object, will populate rundict with names, models, feature
     def init_tuned(self, tuned):
+        """ pass Tuner object, populatest with names, models, features """
         if tuned.best_models=={}:
             raise ValueError('No tuned models found')
         else:
             self.rundict.update(tuned.best_models)
     
-    #Produce predicted class and probabilities
     def predsprobs(self, model, test_x):
+        """ Produce predicted class and probabilities """
         preds = model.predict(test_x)
         probs = model.predict_proba(test_x)[:,1]
         return(preds, probs)
     
-    #Produce metrics
     def get_metrics(self, preds, probs, test_y):
+        """ Produce metrics (f1 score, AUC, brier) """
         f1_s = metrics.f1_score(test_y, preds)
         roc = metrics.roc_auc_score(test_y, preds)
         brier = metrics.brier_score_loss(test_y, probs)
         return(f1_s, roc, brier)
     
-    #Run production, output dictionary
     def make_result(self, model, test_x, test_y):
+        """ gets predictions and runs metrics """
         preds, probs = self.predsprobs(model, test_x)
         f1_s, roc, brier = self.get_metrics(preds, probs, test_y)
         print "f1_score: ", f1_s
@@ -148,10 +150,14 @@ class Tester():
         result['brier'] = brier
         return(result)
 
-    # Run model - Specify model, with parameters, features
-    # Stores it to rundict, can later be output
-    # Will overwrite previous run if name is not different
+    
     def run_model(self, name, model, features, cal=True, cal_m='sigmoid'):
+        """
+        Run a specific model (not from Tuner classs)
+        By default, calibrates predictions and produces metrics for them
+        Will also store in rundict object
+        """
+
         results = {}
         results['features'] = list(features)
         print "Fitting {} model with {} features".format(name, len(features))
@@ -187,12 +193,73 @@ class Tester():
         else:
             self.rundict.update({name:results})
     
-    #Run from tuned set
     def run_tuned(self, name, cal=True, cal_m='sigmoid'):
+        """ Wrapper for run_model when using Tuner object """
         self.run_model(name, self.rundict[name]['model'], self.rundict[name]['features'], cal, cal_m)
+
+    def lift_chart(self, x_col, y_col, data, ax=None):
+        """ 
+        create lift chart 
+        x_col = pctiles of predictions
+        y_col = % positive class
+        """
+        p = sns.barplot(x=x_col, y=y_col, data=data, 
+                        palette='Greens', ax = None, ci=None)
+        vals = p.get_yticks()
+        p.set_yticklabels(['{:3.0f}%'.format(i*100) for i in vals])
+        xvals = [x.get_text().split(',')[-1].strip(']') for x in p.get_xticklabels()]
+        xvals = ['{:2.1f}%'.format(float(x)*100) for x in xvals]
+        p.set_xticklabels(xvals, rotation=30)
+        p.set_facecolor('white')
+        p.set_xlabel('')
+        p.set_ylabel('')
+        p.set_title('Predicted probability vs actual percent')
+        return(p)
     
-    #Output rundict to csv
+    def density(self, data, score_col, ax=None):
+        """ create kdeplot of predictions """
+        p = sns.kdeplot(data[score_col], ax=ax)
+        p.set_facecolor('white')
+        p.legend('')
+        p.set_xlabel('Predicted probability')
+        p.set_title('KDE plot predictions')
+        return(p)
+
+    def density_and_lift_charts(self, model_name, model_params=None, verbose=True, qcut=10):
+        """ 
+        produces prediction density and decile lift chart 
+        currently only works for binary targets (0/1)
+        model_name : name in rundict (if used).  Will be used as title
+        model_params : can just pass model params (from rundict)
+        verbose : True if you want the prediction deciles to be output
+        qcut : can specify percentile cut (default = decile)
+        """
+        if model_params:
+            pass
+        elif model_name not in self.rundict:
+            raise ValueError('%s not in rundict' % model_name)
+        else:
+            model_params = self.rundict[model_name]
+        risk_scores = model_params['m_fit'].predict_proba(
+            self.data.test_x[model_params['features']])
+        risk_scores = risk_scores[:,1]
+        risk_df = pd.DataFrame(
+            {'risk_score':risk_scores, 'target':self.data.test_y})
+        risk_df['categories'] = pd.qcut(risk_df['risk_score'], qcut)
+        risk_mean = risk_df.groupby('categories')['target'].mean().reset_index()
+        if verbose:
+            print risk_df.risk_score.describe()
+            print risk_mean
+        fig, axes = plt.subplots(1, 2)
+        fig.suptitle(model_name)
+        self.lift_chart('categories', 'target', risk_df, 
+                   ax=axes[1])
+        self.density(risk_df, 'risk_score', ax=axes[0])
+        plt.show()
+
+    
     def to_csv(self):
+        """ outputs rundict to csv """
         if self.rundict == {}:
             raise ValueError('No results found')
         else:
