@@ -95,7 +95,7 @@ class Tuner():
             model = getattr(xgb, m_name)
         else:
             raise ValueError('Model name is invalid.')
-        grid = self.make_grid(model, lcvparams, mparams)
+        grid = self.make_grid(model, cvparams, mparams)
         best, results = self.run_grid(grid, self.train_x[features], self.train_y)
         results['name'] = name
         results['m_name'] = m_name
@@ -183,7 +183,7 @@ class Tester():
         results['m_fit'] = m_fit
         if cal:
             print "calibrated:"
-            m_c = CalibratedClassifierCV(m_fit, method = cal_m, cv='prefit')
+            m_c = CalibratedClassifierCV(model, method = cal_m)
             m_fit_c = m_c.fit(cal_x, cal_y)
             result_c = self.make_result(m_fit_c, self.data.test_x[features], self.data.test_y)
             results['calibrated'] = result_c              
