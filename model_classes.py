@@ -160,6 +160,7 @@ class Tester():
 
         results = {}
         results['features'] = list(features)
+        results['model'] = model
         print "Fitting {} model with {} features".format(name, len(features))
         if cal:
             # Need disjoint calibration/training datasets
