@@ -5,7 +5,7 @@ import sklearn.linear_model as skl
 from sklearn import metrics
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn import cross_validation as cv
+from sklearn import model_selection as cv
 
 class Indata():
     scoring = None
@@ -68,7 +68,7 @@ class Tuner():
         #Makes CV grid
         grid = RandomizedSearchCV(
                     model(),scoring=cvparams['pmetric'], 
-                    cv = cv.KFold(obs,cvparams['folds']), 
+                    cv = cv.KFold(cvparams['folds']), 
                     refit=False, n_iter=cvparams['iter'],
                     param_distributions=mparams, verbose=1)
         return(grid)
