@@ -1,12 +1,13 @@
 import numpy as np
 import pandas as pd
 import sklearn.ensemble as ske
+import sklearn.svm as svm
 import sklearn.linear_model as skl
 import xgboost as xgb
 import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn import metrics
-from sklearn.model_selection import RandomizedSearchCV, KFold
+from sklearn.model_selection import RandomizedSearchCV, KFold, StratifiedKFold, GroupKFold, GroupShuffleSplit
 from sklearn.calibration import CalibratedClassifierCV
 #from sklearn import cross_validation as cv
 from sklearn.preprocessing import StandardScaler
@@ -31,8 +32,25 @@ class Indata():
     # pct : percent training observations
     # datesort : specify date column for sorting values
     #   If this is not None, split will be non-random (i.e. split on sorted obs)
-    def tr_te_split(self, pct, datesort=None):
-        if datesort:
+    def tr_te_split(self, pct, datesort=None, group_col=None):
+        """
+        Split into train/test
+        pct : percent training observations
+        datesort : specify date column for sorting values
+            If this is not None, split will be non-random (i.e. split on sorted obs)
+        group_col : group column name for groupkfold split
+            Will also be passed to tuner
+        """
+        if group_col:
+            self.group_col = group_col
+            grouper = GroupShuffleSplit(n_splits=1, test_size = 1-pct, train_size=pct)
+            g = grouper.split(self.data, groups=self.data[group_col])
+            # get the actual indexes of the training set
+            inds, _ = tuple(*g)
+            # translate that into boolean array
+            inds = self.data.index[inds]
+            inds = self.data.index.isin(inds)
+        elif datesort:
             self.data.sort_values(datesort, inplace=True)
             self.data.reset_index(drop=True, inplace=True)
             inds = np.arange(0.0,len(self.data)) / len(self.data) < pct
@@ -54,26 +72,33 @@ class Tuner():
     
     data = None
     train_x, train_y = None, None
+    group_col = None
     
     def __init__(self, indata, best_models=None, grid_results=None):
         if indata.is_split == 0:
             raise ValueError('Data is not split, cannot be tested')
-        else:
-            self.data = indata.data
-            self.train_x = indata.train_x
-            self.train_y = indata.train_y
-            if best_models is None:
-                self.best_models = {}
-            if grid_results is None:
-                self.grid_results = pd.DataFrame()
+        # check if grouped by some column
+        if hasattr(indata,'group_col'):
+            self.group_col = indata.group_col
+        self.data = indata.data
+        self.train_x = indata.train_x
+        self.train_y = indata.train_y
+        if best_models is None:
+            self.best_models = {}
+        if grid_results is None:
+            self.grid_results = pd.DataFrame()
         
             
     def make_grid(self, model, cvparams, mparams):
         #Makes CV grid
+        # to implement, no capability for GroupKFold for randomizedsearch
+        #if self.group_col:
+            #cv = GroupKFold(cvparams['folds'])
         grid = RandomizedSearchCV(
                     model(),
                     scoring=cvparams['pmetric'], 
-                    cv = KFold(cvparams['folds'], cvparams['shuffle']), 
+                    #cv = KFold(cvparams['folds'], cvparams['shuffle']),
+                    cv = KFold(cvparams['folds'], cvparams['shuffle']),
                     refit=False, n_iter=cvparams['iter'],
                     param_distributions=mparams, verbose=1)
         return(grid)
@@ -93,6 +118,8 @@ class Tuner():
             model = getattr(skl, m_name)
         elif hasattr(xgb, m_name):
             model = getattr(xgb, m_name)
+        elif hasattr(svm, m_name):
+            model = getattr(svm, m_name)
         else:
             raise ValueError('Model name is invalid.')
         grid = self.make_grid(model, cvparams, mparams)
@@ -133,7 +160,7 @@ class Tester():
     def get_metrics(self, preds, probs, test_y):
         """ Produce metrics (f1 score, AUC, brier) """
         f1_s = metrics.f1_score(test_y, preds)
-        roc = metrics.roc_auc_score(test_y, preds)
+        roc = metrics.roc_auc_score(test_y, probs)
         brier = metrics.brier_score_loss(test_y, probs)
         return(f1_s, roc, brier)
     
