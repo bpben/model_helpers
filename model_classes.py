@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 from sklearn import metrics
 from sklearn.model_selection import RandomizedSearchCV, KFold, StratifiedKFold, GroupKFold, GroupShuffleSplit
 from sklearn.calibration import CalibratedClassifierCV
-#from sklearn import cross_validation as cv
 from sklearn.preprocessing import StandardScaler
 
 class Indata():
@@ -95,9 +94,9 @@ class Tuner():
         #if self.group_col:
             #cv = GroupKFold(cvparams['folds'])
         grid = RandomizedSearchCV(
-                    model(),
+                    model(),scoring=cvparams['pmetric'], 
+                    cv = cv.KFold(cvparams['folds']), 
                     scoring=cvparams['pmetric'], 
-                    #cv = KFold(cvparams['folds'], cvparams['shuffle']),
                     cv = KFold(cvparams['folds'], cvparams['shuffle']),
                     refit=False, n_iter=cvparams['iter'],
                     param_distributions=mparams, verbose=1)
