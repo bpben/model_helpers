@@ -42,7 +42,7 @@ class Indata():
         """
         if group_col:
             self.group_col = group_col
-            grouper = GroupShuffleSplit(n_splits=1, test_size = 1-pct, train_size=pct)
+            grouper = GroupShuffleSplit(n_splits=1, train_size=pct)
             g = grouper.split(self.data, groups=self.data[group_col])
             # get the actual indexes of the training set
             inds, _ = tuple(*g)
@@ -95,8 +95,6 @@ class Tuner():
             #cv = GroupKFold(cvparams['folds'])
         grid = RandomizedSearchCV(
                     model(),scoring=cvparams['pmetric'], 
-                    cv = cv.KFold(cvparams['folds']), 
-                    scoring=cvparams['pmetric'], 
                     cv = KFold(cvparams['folds'], cvparams['shuffle']),
                     refit=False, n_iter=cvparams['iter'],
                     param_distributions=mparams, verbose=1)
@@ -152,14 +150,23 @@ class Tester():
     
     def predsprobs(self, model, test_x):
         """ Produce predicted class and probabilities """
-        preds = model.predict(test_x)
-        probs = model.predict_proba(test_x)[:,1]
+        # if the model doesn't have predict proba, will be treated as GLM
+        if hasattr(model, 'predict_proba'):
+            preds = model.predict(test_x)
+            probs = model.predict_proba(test_x)[:,1]
+        else:
+            probs = model.predict(test_x)
+            preds = (probs>=.5).astype(int)
         return(preds, probs)
     
     def get_metrics(self, preds, probs, test_y):
         """ Produce metrics (f1 score, AUC, brier) """
-        f1_s = metrics.f1_score(test_y, preds)
-        roc = metrics.roc_auc_score(test_y, probs)
+        # if test is not binary, just run brier
+        if len(np.unique(test_y))==2:
+            f1_s = metrics.f1_score(test_y, preds)
+            roc = metrics.roc_auc_score(test_y, probs)
+        else:
+            f1_s, roc = None, None
         brier = metrics.brier_score_loss(test_y, probs)
         return(f1_s, roc, brier)
     
@@ -224,7 +231,7 @@ class Tester():
         """ Wrapper for run_model when using Tuner object """
         self.run_model(name, self.rundict[name]['model'], self.rundict[name]['features'], cal, cal_m)
 
-    def lift_chart(self, x_col, y_col, data, ax=None):
+    def lift_chart(self, x_col, y_col, data, ax=None, pct=True):
         """ 
         create lift chart 
         x_col = pctiles of predictions
@@ -233,9 +240,10 @@ class Tester():
         p = sns.barplot(x=x_col, y=y_col, data=data, 
                         palette='Greens', ax = None, ci=None)
         vals = p.get_yticks()
-        p.set_yticklabels(['{:3.0f}%'.format(i*100) for i in vals])
         xvals = [x.get_text().split(',')[-1].strip(']') for x in p.get_xticklabels()]
-        xvals = ['{:2.1f}%'.format(float(x)*100) for x in xvals]
+        if pct==True:
+            p.set_yticklabels(['{:3.0f}%'.format(i*100) for i in vals])
+            xvals = ['{:2.1f}%'.format(float(x)*100) for x in xvals]
         p.set_xticklabels(xvals, rotation=30)
         p.set_facecolor('white')
         p.set_xlabel('')
@@ -252,36 +260,35 @@ class Tester():
         p.set_title('KDE plot predictions')
         return(p)
 
-    def density_and_lift_charts(self, model_name, model_params=None, verbose=True, qcut=10):
+    def density_and_lift_charts(self, model, features=None, model_params=None, verbose=True, qcut=10):
         """ 
         produces prediction density and decile lift chart 
         currently only works for binary targets (0/1)
-        model_name : name in rundict (if used).  Will be used as title
+        model (str or object with predict) : name in rundict (if used), otherwise model
+        features (list) : list of features, if not available in rundict
         model_params : can just pass model params (from rundict)
         verbose : True if you want the prediction deciles to be output
         qcut : can specify percentile cut (default = decile)
         """
         if model_params:
             pass
-        elif model_name not in self.rundict:
-            raise ValueError('%s not in rundict' % model_name)
+        elif model not in self.rundict:
+            preds, probs = self.predsprobs(model, self.data.test_x[features])
         else:
-            model_params = self.rundict[model_name]
-        risk_scores = model_params['m_fit'].predict_proba(
-            self.data.test_x[model_params['features']])
-        risk_scores = risk_scores[:,1]
+            model_params = self.rundict[model]
+            preds, probs = self.predsprobs(model_params['m_fit'],
+                self.data.test_x[model_params['features']])
         risk_df = pd.DataFrame(
-            {'risk_score':risk_scores, 'target':self.data.test_y})
-        risk_df['categories'] = pd.qcut(risk_df['risk_score'], qcut)
+            {'probs':probs, 'target':self.data.test_y})
+        risk_df['categories'] = pd.qcut(risk_df['probs'], qcut)
         risk_mean = risk_df.groupby('categories')['target'].mean().reset_index()
         if verbose:
-            print risk_df.risk_score.describe()
+            print risk_df.probs.describe()
             print risk_mean
         fig, axes = plt.subplots(1, 2)
-        fig.suptitle(model_name)
         self.lift_chart('categories', 'target', risk_df, 
                    ax=axes[1])
-        self.density(risk_df, 'risk_score', ax=axes[0])
+        self.density(risk_df, 'probs', ax=axes[0])
         plt.show()
 
     
