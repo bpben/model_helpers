@@ -7,5 +7,4 @@ setup(name='model_helpers',
       author='BB',
       author_email='yksrotab@gmail.com',
       license='MIT',
-      packages=['model_classes'],
       zip_safe=False)
