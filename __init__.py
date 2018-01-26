@@ -1,4 +1,1 @@
-#
-# define as module
-#
-#
+from model_classes import *
