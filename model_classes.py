@@ -160,28 +160,25 @@ class Tester():
         return(preds, probs)
     
     def get_metrics(self, preds, probs, test_y):
-        """ Produce metrics (f1 score, AUC, brier) """
-        # if test is not binary, just run brier
+        """ Produce metrics  """
+        result_metrics = {}
         if len(np.unique(test_y))==2:
-            f1_s = metrics.f1_score(test_y, preds)
-            roc = metrics.roc_auc_score(test_y, probs)
+            result_metrics['f1_s'] = metrics.f1_score(test_y, preds)
+            result_metrics['roc'] = metrics.roc_auc_score(test_y, probs)
+            result_metrics['brier'] = metrics.brier_score_loss(test_y, probs)            
         else:
-            f1_s, roc = None, None
-        brier = metrics.brier_score_loss(test_y, probs)
-        return(f1_s, roc, brier)
+            result_metrics['mae'] = metrics.mean_absolute_error(test_y, probs)
+            result_metrics['r2'] = metrics.r2_score(test_y, probs)
+            result_metrics['mse'] = metrics.mean_squared_error(test_y, probs)
+        return(result_metrics)
     
     def make_result(self, model, test_x, test_y):
         """ gets predictions and runs metrics """
         preds, probs = self.predsprobs(model, test_x)
-        f1_s, roc, brier = self.get_metrics(preds, probs, test_y)
-        print "f1_score: ", f1_s
-        print "roc auc: ", roc
-        print "brier_score: ", brier
-        result = {}
-        result['f1_s'] = f1_s
-        result['roc'] = roc
-        result['brier'] = brier
-        return(result)
+        result_metrics = self.get_metrics(preds, probs, test_y)
+        for k in result_metrics:
+            print '{}:{}'.format(k, result_metrics[k])
+        return(result_metrics)
 
     
     def run_model(self, name, model, features, cal=True, cal_m='sigmoid'):
