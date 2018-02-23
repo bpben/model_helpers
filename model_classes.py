@@ -31,7 +31,7 @@ class Indata():
     # pct : percent training observations
     # datesort : specify date column for sorting values
     #   If this is not None, split will be non-random (i.e. split on sorted obs)
-    def tr_te_split(self, pct, datesort=None, group_col=None):
+    def tr_te_split(self, pct, datesort=None, group_col=None, seed=None):
         """
         Split into train/test
         pct : percent training observations
@@ -54,6 +54,7 @@ class Indata():
             self.data.reset_index(drop=True, inplace=True)
             inds = np.arange(0.0,len(self.data)) / len(self.data) < pct
         else:
+            np.random.seed(seed)
             inds = np.random.rand(len(self.data)) < pct
         self.train_x = self.data[inds]
         print 'Train obs:', len(self.train_x)
@@ -281,12 +282,11 @@ class Tester():
         risk_mean = risk_df.groupby('categories')['target'].mean().reset_index()
         if verbose:
             print risk_df.probs.describe()
-            print risk_mean
         fig, axes = plt.subplots(1, 2)
         self.lift_chart('categories', 'target', risk_df, 
                    ax=axes[1])
         self.density(risk_df, 'probs', ax=axes[0])
-        plt.show()
+        return(risk_df)
 
     
     def to_csv(self):
