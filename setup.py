@@ -9,4 +9,10 @@ setup(name='model_helpers',
       author='BB',
       author_email='yksrotab@gmail.com',
       keywords = ['models', 'ML', 'tuning', 'training'],
-      license='MIT')
+      license='MIT',
+      install_requires=['xgboost', 'scikit-learn', 'pandas'],
+      python_requires=['>=2.6'],
+      classifiers=['Development Status :: 3 - Alpha',
+      'Intended Audience :: Developers',
+      'License :: OSI Approved :: MIT License',
+      'Programming Language :: Python :: 2.7'])
