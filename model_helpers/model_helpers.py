@@ -1,3 +1,7 @@
+from __future__ import print_function
+from __future__ import division
+from builtins import object
+from past.utils import old_div
 import numpy as np
 import pandas as pd
 import sklearn.ensemble as ske
@@ -11,7 +15,7 @@ from sklearn.model_selection import RandomizedSearchCV, KFold, StratifiedKFold, 
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.preprocessing import StandardScaler
 
-class Indata():
+class Indata(object):
     scoring = None
     data = None
     train_x, train_y, test_x, test_y = None, None, None, None
@@ -52,19 +56,19 @@ class Indata():
         elif datesort:
             self.data.sort_values(datesort, inplace=True)
             self.data.reset_index(drop=True, inplace=True)
-            inds = np.arange(0.0,len(self.data)) / len(self.data) < pct
+            inds = old_div(np.arange(0.0,len(self.data)), len(self.data)) < pct
         else:
             np.random.seed(seed)
             inds = np.random.rand(len(self.data)) < pct
         self.train_x = self.data[inds]
-        print 'Train obs:', len(self.train_x)
+        print('Train obs:', len(self.train_x))
         self.train_y = self.data[self.target][inds]
         self.test_x = self.data[~inds]
-        print 'Test obs:', len(self.test_x)
+        print('Test obs:', len(self.test_x))
         self.test_y = self.data[self.target][~inds]
         self.is_split = 1
         
-class Tuner():
+class Tuner(object):
     """
     Initiates with indata class, will tune series of models according to parameters.  
     Outputs RandomizedGridCV results and parameterized model in dictionary
@@ -129,7 +133,7 @@ class Tuner():
         best['features'] = list(features)
         self.best_models.update({name: best}) 
         
-class Tester():
+class Tester(object):
     """
     Initiates with indata class, receives parameterized sklearn models, prints and stores results
     """
@@ -178,7 +182,7 @@ class Tester():
         preds, probs = self.predsprobs(model, test_x)
         result_metrics = self.get_metrics(preds, probs, test_y)
         for k in result_metrics:
-            print '{}:{}'.format(k, result_metrics[k])
+            print('{}:{}'.format(k, result_metrics[k]))
         return(result_metrics)
 
     
@@ -192,7 +196,7 @@ class Tester():
         results = {}
         results['features'] = list(features)
         results['model'] = model
-        print "Fitting {} model with {} features".format(name, len(features))
+        print("Fitting {} model with {} features".format(name, len(features)))
         if cal:
             # Need disjoint calibration/training datasets
             # Split 50/50
@@ -214,12 +218,12 @@ class Tester():
         results['raw'] = result
         results['m_fit'] = m_fit
         if cal:
-            print "calibrated:"
+            print("calibrated:")
             m_c = CalibratedClassifierCV(model, method = cal_m)
             m_fit_c = m_c.fit(cal_x, cal_y)
             result_c = self.make_result(m_fit_c, self.data.test_x[features], self.data.test_y)
             results['calibrated'] = result_c              
-            print "\n"
+            print("\n")
         if name in self.rundict:
             self.rundict[name].update(results)
         else:
@@ -281,7 +285,7 @@ class Tester():
         risk_df['categories'] = pd.qcut(risk_df['probs'], qcut)
         risk_mean = risk_df.groupby('categories')['target'].mean().reset_index()
         if verbose:
-            print risk_df.probs.describe()
+            print(risk_df.probs.describe())
         fig, axes = plt.subplots(1, 2)
         self.lift_chart('categories', 'target', risk_df, 
                    ax=axes[1])
