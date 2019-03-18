@@ -1,73 +1,69 @@
-from __future__ import print_function
-from __future__ import division
-from builtins import object
-from past.utils import old_div
 import numpy as np
 import pandas as pd
 import sklearn.ensemble as ske
 import sklearn.svm as svm
 import sklearn.linear_model as skl
 import xgboost as xgb
-import seaborn as sns
-import matplotlib.pyplot as plt
 from sklearn import metrics
 from sklearn.model_selection import RandomizedSearchCV, KFold, StratifiedKFold, GroupKFold, GroupShuffleSplit
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.preprocessing import StandardScaler
 
 class Indata(object):
+    """
+    Data format for feeding into Tuner/Tester classes
+    """
     scoring = None
     data = None
     train_x, train_y, test_x, test_y = None, None, None, None
     is_split = 0
     
-    #init with pandas DF and target column name, specify scoring observations
-    def __init__(self, data, target, scoring=None):
-        #If scoring observations, store under scoring attribute
+    def __init__(self, X, y, scoring=None):
+        """
+        X : all feature data, as pandas dataframe
+        y : target data, as pd.Series or array
+        scoring : idxs of scoring observations to not be included in training/test
+        TODO: Not sure if we need this, actually
+        """
         if scoring is not None:
-            self.data = data[~(scoring)]
-            self.scoring = data[scoring]
+            self.data = X[~(scoring)]
+            self.scoring = X[scoring]
         else:
-            self.data = data
-        self.target = target
+            self.data = X
+        self.target = y
     
-    # Split into train/test
-    # pct : percent training observations
-    # datesort : specify date column for sorting values
-    #   If this is not None, split will be non-random (i.e. split on sorted obs)
-    def tr_te_split(self, pct, datesort=None, group_col=None, seed=None):
+    def tr_te_split(self, pct=.7, splitter=None, datesort=None, seed=None, **kwargs):
         """
         Split into train/test
-        pct : percent training observations
+        pct : percent training observations, either this or a splitter need to be identified
+        splitter : a sklearn.model_selection splitter, tested with Stratified Shuffle Split
+        TODO: Test on others
         datesort : specify date column for sorting values
             If this is not None, split will be non-random (i.e. split on sorted obs)
-        group_col : group column name for groupkfold split
-            Will also be passed to tuner
+        seed : random seed (optional)
+        other arguments will be used with splitter
         """
-        if group_col:
-            self.group_col = group_col
-            grouper = GroupShuffleSplit(n_splits=1, train_size=pct)
-            g = grouper.split(self.data, groups=self.data[group_col])
+        if splitter:
+            self.splitter = splitter
+            g = splitter.split(self.data, **kwargs)
             # get the actual indexes of the training set
             inds, _ = tuple(*g)
             # translate that into boolean array
-            inds = self.data.index[inds]
             inds = self.data.index.isin(inds)
         elif datesort:
             self.data.sort_values(datesort, inplace=True)
             self.data.reset_index(drop=True, inplace=True)
-            inds = old_div(np.arange(0.0,len(self.data)), len(self.data)) < pct
+            inds = np.arange(0.0,len(self.data))/len(self.data) < pct
         else:
             np.random.seed(seed)
             inds = np.random.rand(len(self.data)) < pct
         self.train_x = self.data[inds]
         print('Train obs:', len(self.train_x))
-        self.train_y = self.data[self.target][inds]
+        self.train_y = self.target[inds]
         self.test_x = self.data[~inds]
         print('Test obs:', len(self.test_x))
-        self.test_y = self.data[self.target][~inds]
+        self.test_y = self.target[~inds]
         self.is_split = 1
-        
+
 class Tuner(object):
     """
     Initiates with indata class, will tune series of models according to parameters.  
@@ -96,13 +92,16 @@ class Tuner(object):
     def make_grid(self, model, cvparams, mparams):
         #Makes CV grid
         # to implement, no capability for GroupKFold for randomizedsearch
-        #if self.group_col:
-            #cv = GroupKFold(cvparams['folds'])
+        if 'cv' in cvparams:
+            cv = cvparams['cv']
+        else:
+            cv = KFold(n_splits=5)
         grid = RandomizedSearchCV(
                     model(),scoring=cvparams['pmetric'], 
-                    cv = KFold(cvparams['folds'], cvparams['shuffle']),
+                    cv = cv,
                     refit=False, n_iter=cvparams['iter'],
-                    param_distributions=mparams, verbose=1)
+                    param_distributions=mparams, verbose=1,
+                    return_train_score=True)
         return(grid)
     
     def run_grid(self, grid, train_x, train_y):
@@ -158,80 +157,103 @@ class Tester(object):
         # if the model doesn't have predict proba, will be treated as GLM
         if hasattr(model, 'predict_proba'):
             preds = model.predict(test_x)
-            probs = model.predict_proba(test_x)[:,1]
+            probs = model.predict_proba(test_x)
         else:
             probs = model.predict(test_x)
             preds = (probs>=.5).astype(int)
         return(preds, probs)
     
-    def get_metrics(self, preds, probs, test_y):
-        """ Produce metrics  """
+    def get_metrics(self, preds, probs, test_y, metric_dict={}):
+        """ Produce metrics  
+        TODO: Should receive a set of metrics to run
+        """
         result_metrics = {}
-        if len(np.unique(test_y))==2:
-            result_metrics['f1_s'] = metrics.f1_score(test_y, preds)
-            result_metrics['roc'] = metrics.roc_auc_score(test_y, probs)
-            result_metrics['brier'] = metrics.brier_score_loss(test_y, probs)            
+        if metric_dict=={}:
+            if len(np.unique(test_y))==2:
+                result_metrics['f1_s'] = metrics.f1_score(test_y, preds)
+                result_metrics['roc'] = metrics.roc_auc_score(test_y, probs)
+                result_metrics['brier'] = metrics.brier_score_loss(test_y, probs)            
+            else:
+                result_metrics['mae'] = metrics.mean_absolute_error(test_y, probs)
+                result_metrics['r2'] = metrics.r2_score(test_y, probs)
+                result_metrics['mse'] = metrics.mean_squared_error(test_y, probs)
         else:
-            result_metrics['mae'] = metrics.mean_absolute_error(test_y, probs)
-            result_metrics['r2'] = metrics.r2_score(test_y, probs)
-            result_metrics['mse'] = metrics.mean_squared_error(test_y, probs)
+            for metric in metric_dict:
+                result_metrics[metric] = metric_dict[metric](test_y, probs)
         return(result_metrics)
     
-    def make_result(self, model, test_x, test_y):
+    def make_result(self, model, test_x, test_y, metric_dict={}):
         """ gets predictions and runs metrics """
         preds, probs = self.predsprobs(model, test_x)
-        result_metrics = self.get_metrics(preds, probs, test_y)
+        result_metrics = self.get_metrics(preds, probs, test_y, metric_dict=metric_dict)
         for k in result_metrics:
             print('{}:{}'.format(k, result_metrics[k]))
         return(result_metrics)
 
     
-    def run_model(self, name, model, features, cal=True, cal_m='sigmoid'):
+    def run_model(self, name, model=None, features=None, 
+                  cal=False, cal_m='sigmoid', tuned=False, metric_dict={}):
         """
-        Run a specific model (not from Tuner classs)
+        Run a specific model
         By default, calibrates predictions and produces metrics for them
         Will also store in rundict object
         """
 
         results = {}
-        results['features'] = list(features)
-        results['model'] = model
-        print("Fitting {} model with {} features".format(name, len(features)))
+        if name in self.rundict:
+            if tuned:
+                results['features'] = list(self.rundict[name]['features'])
+                results['model'] = self.rundict[name]['model']
+            # warn of overwrite
+            else:
+                print('overwriting old %s instance' % name)
+        else:
+            results['features'] = list(features)
+            results['model'] = model
+            print("Fitting {} model with {} features".format(name, len(features)))
         if cal:
             # Need disjoint calibration/training datasets
             # Split 50/50
             rnd_ind = np.random.rand(len(self.data.train_x)) < .5
-            train_x = self.data.train_x[features][rnd_ind]
+            train_x = self.data.train_x[results['features']][rnd_ind]
             train_y = self.data.train_y[rnd_ind]
-            cal_x = self.data.train_x[features][~rnd_ind]
+            cal_x = self.data.train_x[results['features']][~rnd_ind]
             cal_y = self.data.train_y[~rnd_ind]
         else:
-            train_x = self.data.train_x[features]
+            train_x = self.data.train_x[results['features']]
             train_y = self.data.train_y
 
-        m_fit = model.fit(train_x, train_y)
+        self.m_fit = results['model'].fit(train_x, train_y)
+        m_fit = results['model'].fit(train_x, train_y)
         result = self.make_result(
             m_fit,
-            self.data.test_x[features],
-            self.data.test_y)
+            self.data.test_x[results['features']],
+            self.data.test_y,
+            metric_dict=metric_dict)
 
         results['raw'] = result
         results['m_fit'] = m_fit
         if cal:
             print("calibrated:")
-            m_c = CalibratedClassifierCV(model, method = cal_m)
+            m_c = CalibratedClassifierCV(results['model'], method = cal_m)
             m_fit_c = m_c.fit(cal_x, cal_y)
-            result_c = self.make_result(m_fit_c, self.data.test_x[features], self.data.test_y)
+            result_c = self.make_result(m_fit_c, 
+                                        self.data.test_x[results['features']], 
+                                        self.data.test_y)
             results['calibrated'] = result_c              
             print("\n")
         if name in self.rundict:
             self.rundict[name].update(results)
         else:
             self.rundict.update({name:results})
-    
-    def run_tuned(self, name, cal=True, cal_m='sigmoid'):
-        """ Wrapper for run_model when using Tuner object """
-        self.run_model(name, self.rundict[name]['model'], self.rundict[name]['features'], cal, cal_m)
+
+def Viz(object):
+    """ Class for visualizing the results of a Test object"""
+
+    def __init__(self, test_obj):
+
+        self.data = test_obj.data
+        self.rundict = test_obj.rundict
 
     def lift_chart(self, x_col, y_col, data, ax=None, pct=True):
         """ 
@@ -291,13 +313,3 @@ class Tester(object):
                    ax=axes[1])
         self.density(risk_df, 'probs', ax=axes[0])
         return(risk_df)
-
-    
-    def to_csv(self):
-        """ outputs rundict to csv """
-        if self.rundict == {}:
-            raise ValueError('No results found')
-        else:
-            now = pd.to_datetime('today').value
-            #Make dataframe, transpose so each row = model
-            pd.DataFrame(self.rundict).T.to_csv('results_{}.csv'.format(now))
