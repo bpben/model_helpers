@@ -31,37 +31,31 @@ class Indata(object):
             self.data = X
         self.target = y
     
-    def tr_te_split(self, pct=.7, splitter=None, datesort=None, seed=None, **kwargs):
+    def tr_te_split(self, pct=.7, splitter=None, seed=None, **kwargs):
         """
         Split into train/test
         pct : percent training observations, either this or a splitter need to be identified
         splitter : a sklearn.model_selection splitter, tested with Stratified Shuffle Split
         TODO: Test on others
-        datesort : specify date column for sorting values
-            If this is not None, split will be non-random (i.e. split on sorted obs)
         seed : random seed (optional)
         other arguments will be used with splitter
         """
         if splitter:
             self.splitter = splitter
-            g = splitter.split(self.data, **kwargs)
-            # get the actual indexes of the training set
-            inds, _ = tuple(*g)
-            # translate that into boolean array
-            inds = self.data.index.isin(inds)
-        elif datesort:
-            self.data.sort_values(datesort, inplace=True)
-            self.data.reset_index(drop=True, inplace=True)
-            inds = np.arange(0.0,len(self.data))/len(self.data) < pct
         else:
-            np.random.seed(seed)
-            inds = np.random.rand(len(self.data)) < pct
-        self.train_x = self.data[inds]
+            self.splitter = ShuffleSplit(n_splits=1, test_size=0.3)
+        g = self.splitter.split(self.data, **kwargs)
+        # get the actual indexes of the training set
+        train, test = tuple(*g)
+        if hasattr(self.data, 'index'):
+            train = self.data.index.isin(train)
+            test = ~train
+        self.train_x = self.data[train]
         print('Train obs:', len(self.train_x))
-        self.train_y = self.target[inds]
-        self.test_x = self.data[~inds]
+        self.train_y = self.target[train]
+        self.test_x = self.data[test]
         print('Test obs:', len(self.test_x))
-        self.test_y = self.target[~inds]
+        self.test_y = self.target[test]
         self.is_split = 1
 
 class Tuner(object):
@@ -89,19 +83,16 @@ class Tuner(object):
             self.grid_results = pd.DataFrame()
         
             
-    def make_grid(self, model, cvparams, mparams):
-        #Makes CV grid
-        # to implement, no capability for GroupKFold for randomizedsearch
-        if 'cv' in cvparams:
-            cv = cvparams['cv']
+    def make_grid(self, model, mparams, cv_method, cvparams):
+        if cv_method is not None:
+            cv = cv_method
         else:
-            cv = KFold(n_splits=5)
+            # default cv
+            cv = KFold(n_splits=5, shuffle=True)
         grid = RandomizedSearchCV(
-                    model(),scoring=cvparams['pmetric'], 
-                    cv = cv,
-                    refit=False, n_iter=cvparams['iter'],
-                    param_distributions=mparams, verbose=1,
-                    return_train_score=True)
+                    model(), cv=cv, param_distributions=mparams,
+                    return_train_score=True,
+                    **cvparams)
         return(grid)
     
     def run_grid(self, grid, train_x, train_y):
@@ -112,7 +103,15 @@ class Tuner(object):
         best[grid.scoring] = grid.best_score_
         return(best, results)
             
-    def tune(self, name, m_name, features, cvparams, mparams):
+    def tune(self, m_name, features, mparams, cv_method=None, cvparams={}):
+        """
+        Randomized search for best parameters
+        m_name : name of model class in sklearn
+        features : feature names
+        mparams : the parameters to use in grid search, keyed by the m_name
+        cv_method : sklearn model selection class, initiated with parameters, KFold default
+        cvparams : additional parameters to pass to randomized search
+        """
         if hasattr(ske, m_name):
             model = getattr(ske, m_name)
         elif hasattr(skl, m_name):
@@ -123,14 +122,13 @@ class Tuner(object):
             model = getattr(svm, m_name)
         else:
             raise ValueError('Model name is invalid.')
-        grid = self.make_grid(model, cvparams, mparams)
+        grid = self.make_grid(model, mparams, cv_method, cvparams)
         best, results = self.run_grid(grid, self.train_x[features], self.train_y)
-        results['name'] = name
-        results['m_name'] = m_name
+        results['name'] = m_name
         self.grid_results = self.grid_results.append(results)
         best['model'] = model(**best['bp'])
         best['features'] = list(features)
-        self.best_models.update({name: best}) 
+        self.best_models.update({m_name: best}) 
         
 class Tester(object):
     """
