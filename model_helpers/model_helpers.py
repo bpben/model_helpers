@@ -192,8 +192,14 @@ class Tester(object):
     def run_model(self, name, model=None, features=None, 
                   cal=False, cal_m='sigmoid', tuned=False, metric_dict={}):
         """
-        Run a specific model
-        By default, calibrates predictions and produces metrics for them
+        Fit and test model
+        name (str) : name of model
+        model (sklearn model object or None) :  model to fit and test
+        features (list) : list of feature names
+        cal (bool) : calibrate probabilities (TODO: Not fully tested)
+        cal_m (str) : calibration method (TODO)
+        tuned (bool) : whether to use the tuned parameters for the model
+        metric_dict (dict) : dictionary of functions to use to score the model performance
         Will also store in rundict object
         """
 
@@ -202,13 +208,15 @@ class Tester(object):
             if tuned:
                 results['features'] = list(self.rundict[name]['features'])
                 results['model'] = self.rundict[name]['model']
-            # warn of overwrite
             else:
-                print('overwriting old %s instance' % name)
+                # warn of overwrite
+                print('overwriting previous %s results' % name)
+                results['features'] = list(features)
+                results['model'] = model
         else:
             results['features'] = list(features)
             results['model'] = model
-            print("Fitting {} model with {} features".format(name, len(features)))
+        print("Fitting {} model with {} features".format(name, results['features']))
         if cal:
             # Need disjoint calibration/training datasets
             # Split 50/50
@@ -246,7 +254,9 @@ class Tester(object):
             self.rundict.update({name:results})
 
 def Viz(object):
-    """ Class for visualizing the results of a Test object"""
+    """ Class for visualizing the results of a Test object
+    TODO: Not currently tested, for future reconfiguring
+    """
 
     def __init__(self, test_obj):
 
