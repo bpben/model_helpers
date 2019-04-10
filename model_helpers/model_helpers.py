@@ -5,7 +5,7 @@ import sklearn.svm as svm
 import sklearn.linear_model as skl
 import xgboost as xgb
 from sklearn import metrics
-from sklearn.model_selection import RandomizedSearchCV, KFold, StratifiedKFold, GroupKFold, GroupShuffleSplit
+from sklearn.model_selection import RandomizedSearchCV, KFold, StratifiedKFold, GroupKFold, GroupShuffleSplit, ShuffleSplit
 from sklearn.calibration import CalibratedClassifierCV
 
 class Indata(object):
@@ -48,7 +48,7 @@ class Indata(object):
         # get the actual indexes of the training set
         train, test = tuple(*g)
         if hasattr(self.data, 'index'):
-            train = self.data.index.isin(train)
+            train = self.data.index.isin(self.data.index[train])
             test = ~train
         self.train_x = self.data[train]
         print('Train obs:', len(self.train_x))
