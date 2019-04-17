@@ -163,14 +163,14 @@ class Tester(object):
     
     def get_metrics(self, preds, probs, test_y, metric_dict={}):
         """ Produce metrics  
-        TODO: Should receive a set of metrics to run
+        TODO: Assumes metrics are applied to probabilities, not the right way to do this
         """
         result_metrics = {}
         if metric_dict=={}:
             if len(np.unique(test_y))==2:
                 result_metrics['f1_s'] = metrics.f1_score(test_y, preds)
-                result_metrics['roc'] = metrics.roc_auc_score(test_y, probs)
-                result_metrics['brier'] = metrics.brier_score_loss(test_y, probs)            
+                result_metrics['roc'] = metrics.roc_auc_score(test_y, probs[:,1])
+                result_metrics['brier'] = metrics.brier_score_loss(test_y, probs[:,1])            
             else:
                 result_metrics['mae'] = metrics.mean_absolute_error(test_y, probs)
                 result_metrics['r2'] = metrics.r2_score(test_y, probs)
@@ -253,7 +253,7 @@ class Tester(object):
         else:
             self.rundict.update({name:results})
 
-def Viz(object):
+class Viz(object):
     """ Class for visualizing the results of a Test object
     TODO: Not currently tested, for future reconfiguring
     """
@@ -262,6 +262,7 @@ def Viz(object):
 
         self.data = test_obj.data
         self.rundict = test_obj.rundict
+        self.test_obj = test_obj
 
     def lift_chart(self, x_col, y_col, data, ax=None, pct=True):
         """ 
@@ -308,10 +309,10 @@ def Viz(object):
             preds, probs = self.predsprobs(model, self.data.test_x[features])
         else:
             model_params = self.rundict[model]
-            preds, probs = self.predsprobs(model_params['m_fit'],
+            preds, probs = self.test_obj.predsprobs(model_params['m_fit'],
                 self.data.test_x[model_params['features']])
         risk_df = pd.DataFrame(
-            {'probs':probs, 'target':self.data.test_y})
+            {'probs':probs[:,1], 'target':self.data.test_y})
         risk_df['categories'] = pd.qcut(risk_df['probs'], qcut)
         risk_mean = risk_df.groupby('categories')['target'].mean().reset_index()
         if verbose:
